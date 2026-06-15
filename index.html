@@ -163,10 +163,12 @@ const params=new URLSearchParams(location.search);
 const SHORT_CODE=params.get('c');
 const CONTRACT_ID=params.get('id');
 const ADMIN=params.get('admin')==='1';
+const ADMIN_VIEW=params.get('view')==='1';
 
 window.addEventListener('load',()=>{
   document.getElementById('loader').remove();
-  if(ADMIN){ initAdmin(); }
+  if(ADMIN && ADMIN_VIEW){ initAdminView(); }
+  else if(ADMIN){ initAdmin(); }
   else if(SHORT_CODE){ initConsumer({code:SHORT_CODE}); }
   else if(CONTRACT_ID){ initConsumer({id:CONTRACT_ID}); }
   else { showLanding(); }
@@ -181,6 +183,103 @@ function showLanding(){
       시공예약서는 이지도배에서 보내드린 링크로만 열 수 있습니다.<br>
       링크를 다시 확인해 주세요.</p>
   </div>`));
+}
+
+/* ============================================================
+   ADMIN VIEW 모드 — 완성된 계약서 목록·상세·PDF 조회
+   ============================================================ */
+let ADMIN_PIN_CACHE='';
+function initAdminView(){
+  document.getElementById('modetag').textContent=' · 조회';
+  app.appendChild(el(`
+    <div class="sec-title">📂 계약서 조회</div>
+    <div class="sec-sub">관리자 PIN을 입력하면 작성된 예약서 목록이 보입니다.</div>
+    <div class="card">
+      <label class="f req">관리자 PIN</label>
+      <input type="text" id="vpin" placeholder="PIN 입력" autocomplete="off">
+      <button class="copybtn" id="vload" style="margin-top:12px;width:100%;padding:13px;">목록 불러오기</button>
+    </div>
+    <div id="vlist"></div>
+    <div id="vdetail"></div>
+  `));
+  navbar.style.display='none';
+  document.getElementById('vload').onclick=loadAdminList;
+  document.getElementById('vpin').addEventListener('keydown',e=>{ if(e.key==='Enter') loadAdminList(); });
+}
+
+async function loadAdminList(){
+  const pin=v('vpin'); if(!pin){toast('PIN을 입력하세요.'); return;}
+  const btn=document.getElementById('vload'); btn.disabled=true; btn.textContent='불러오는 중...';
+  try{
+    const client=getSB(); if(!client) throw new Error('네트워크 오류');
+    const {data,error}=await client.rpc('admin_list',{p_pin:pin});
+    if(error) throw error;
+    ADMIN_PIN_CACHE=pin;
+    const list=document.getElementById('vlist');
+    list.innerHTML='';
+    document.getElementById('vdetail').innerHTML='';
+    if(!data||!data.length){ list.appendChild(el(`<div class="card center" style="color:var(--muted);">아직 작성된 예약서가 없습니다.</div>`)); btn.disabled=false; btn.textContent='목록 불러오기'; return; }
+    data.forEach(r=>{
+      const done=r.status==='completed';
+      const badge=done?`<span style="background:var(--ok,#3A7D44);color:#fff;font-size:10px;padding:2px 8px;border-radius:999px;">서명완료</span>`
+                       :`<span style="background:var(--muted);color:#fff;font-size:10px;padding:2px 8px;border-radius:999px;">대기중</span>`;
+      const when=done&&r.signed_at?new Date(r.signed_at).toLocaleString('ko-KR'):(r.created_at?new Date(r.created_at).toLocaleDateString('ko-KR'):'');
+      const card=el(`<div class="card" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;" data-code="${r.short_code||''}">
+        <div>
+          <div style="font-weight:900;font-size:15px;">${r.customer_name||'(이름없음)'} <span style="font-size:12px;color:var(--muted);font-weight:400;">${r.serial_no||''}</span></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${r.customer_phone||''} · ${when}</div>
+        </div>
+        <div style="text-align:right;">${badge}<div style="font-size:18px;color:var(--gold);margin-top:4px;">›</div></div>
+      </div>`);
+      if(r.short_code) card.onclick=()=>loadAdminDetail(r.short_code);
+      list.appendChild(card);
+    });
+    btn.disabled=false; btn.textContent='목록 새로고침';
+  }catch(e){ toast('불러오기 실패: '+(e.message||'PIN 확인')); btn.disabled=false; btn.textContent='목록 불러오기'; }
+}
+
+async function loadAdminDetail(code){
+  const dv=document.getElementById('vdetail');
+  dv.innerHTML='<div class="loader">불러오는 중...</div>';
+  dv.scrollIntoView({behavior:'smooth'});
+  try{
+    const client=getSB();
+    const {data,error}=await client.rpc('admin_detail',{p_pin:ADMIN_PIN_CACHE,p_code:code});
+    if(error) throw error;
+    if(!data||!data.length){ dv.innerHTML='<div class="card">찾을 수 없습니다.</div>'; return; }
+    const d=data[0];
+    const r=d.reservation||{}, pv=d.private_data||{}, c=d.checklist||{};
+    const pwLine=(pv.pw_pub||pv.pw_home)?`<div class="rorow"><div class="rok">출입비번</div><div class="rov">${(pv.pw_pub?'공용 '+pv.pw_pub+' ':'')}${(pv.pw_home?'/ 현관 '+pv.pw_home:'')}</div></div>`:'';
+    let ckRows='';
+    Object.keys(c).forEach(k=>{const it=c[k];
+      ckRows+=`<div class="rorow"><div class="rok" style="width:auto;flex:1;">${k}. ${it.q||''}</div><div class="rov" style="flex:0 0 auto;font-weight:700;">${it.answer||'-'}</div></div>`;
+      if(it.detail&&it.detail.trim()) ckRows+=`<div class="rorow"><div class="rok" style="background:#fff;"></div><div class="rov" style="font-size:12px;color:var(--gold);">↳ ${it.detail}</div></div>`;
+    });
+    dv.innerHTML='';
+    dv.appendChild(el(`
+      <div class="sec-title" style="margin-top:24px;">🧾 ${d.customer_name||''} · ${d.serial_no||''}</div>
+      <div class="ro">
+        <div class="rorow"><div class="rok">상태</div><div class="rov">${d.status==='completed'?'✅ 서명완료':'⏳ 대기중'}</div></div>
+        <div class="rorow"><div class="rok">연락처</div><div class="rov">${d.customer_phone||'-'}</div></div>
+        <div class="rorow"><div class="rok">시공일</div><div class="rov">${d.construction_date||'-'}</div></div>
+        <div class="rorow"><div class="rok">주소</div><div class="rov">${r.addr||'-'}</div></div>
+        ${pwLine}
+        <div class="rorow"><div class="rok">최종시공비</div><div class="rov">${r.final||'-'}</div></div>
+      </div>
+      ${ckRows?`<div style="font-weight:700;font-size:13px;margin:16px 0 6px;">체크리스트</div><div class="ro">${ckRows}</div>`:''}
+      ${d.signature_data?`<div style="font-weight:700;font-size:13px;margin:16px 0 6px;">서명 (${d.signed_name||''})</div>
+        <div class="card"><img src="${d.signature_data}" style="max-width:100%;border-bottom:1px solid #ccc;">
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;">${d.signed_at?new Date(d.signed_at).toLocaleString('ko-KR'):''}</div></div>`:''}
+      ${d.status==='completed'?`<button class="btn primary" id="vpdf" style="width:100%;margin-top:10px;">📄 이 계약서 PDF 저장</button>`:''}
+    `));
+    const pdfBtn=document.getElementById('vpdf');
+    if(pdfBtn){
+      savedAll={serial_no:d.serial_no, reservation:r, customer_name:d.customer_name, customer_phone:d.customer_phone,
+        construction_date:d.construction_date, checklist:c, signed_name:d.signed_name,
+        signature_data:d.signature_data, signed_at:d.signed_at, private_data:pv};
+      pdfBtn.onclick=savePDF;
+    }
+  }catch(e){ dv.innerHTML='<div class="card">불러오기 실패: '+(e.message||'')+'</div>'; }
 }
 
 /* ============================================================
