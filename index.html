@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>이지도배 시공예약서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root{
+    --bg:#FAF9F7; --gold:#C4703F; --gold-d:#A85A30; --ink:#1A1613;
+    --line:#E5E0D8; --soft:#F2EEE8; --muted:#8A8178; --white:#fff;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0;}
+  body{font-family:'Noto Sans KR',sans-serif; background:var(--bg); color:var(--ink);
+    line-height:1.6; font-size:15px; padding-bottom:90px;}
+  .wrap{max-width:560px; margin:0 auto; padding:0 16px;}
+  header{background:var(--white); border-bottom:1px solid var(--line); padding:18px 16px; position:sticky; top:0; z-index:50;}
+  header .wrap{display:flex; align-items:center; justify-content:space-between;}
+  .brand{font-weight:900; font-size:19px; letter-spacing:-.5px;}
+  .brand span{color:var(--gold);}
+  .slogan{font-size:11.5px; color:var(--gold); margin-top:2px; font-weight:700;}
+  .nodot{font-size:11px; color:var(--muted); text-align:right;}
+  .modetag{font-size:10px; background:var(--ink); color:#fff; padding:2px 8px; border-radius:999px; margin-top:4px; display:inline-block;}
+  .progress{height:4px; background:var(--soft);} .progress>i{display:block; height:100%; width:0; background:var(--gold); transition:width .3s;}
+  .step{display:none; animation:fade .25s;} .step.active{display:block;}
+  @keyframes fade{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
+  .card{background:var(--white); border:1px solid var(--line); border-radius:14px; padding:18px; margin:16px 0;}
+  .sec-title{font-size:17px; font-weight:900; margin:22px 0 4px; letter-spacing:-.5px;}
+  .sec-sub{font-size:12.5px; color:var(--muted); margin-bottom:6px;}
+  label.f{display:block; font-size:12.5px; font-weight:700; margin:14px 0 6px;}
+  .req:after{content:" *"; color:var(--gold); font-weight:900;}
+  input[type=text],input[type=tel],input[type=number],textarea,select{
+    width:100%; border:1px solid var(--line); border-radius:10px; padding:12px 13px; font-size:15px;
+    font-family:inherit; background:var(--bg); color:var(--ink); -webkit-appearance:none; appearance:none;}
+  input:focus,textarea:focus,select:focus{outline:none; border-color:var(--gold); background:var(--white);}
+  textarea{min-height:64px; resize:vertical;}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .hint{font-size:11.5px; color:var(--muted); margin-top:4px;}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:2px;}
+  .chip{border:1px solid var(--line); background:var(--white); border-radius:999px; padding:9px 14px;
+    font-size:13.5px; cursor:pointer; user-select:none; transition:.12s;}
+  .chip.on{background:var(--gold); color:#fff; border-color:var(--gold); font-weight:700;}
+  .ck{border:1px solid var(--line); border-radius:12px; padding:13px 14px; margin:10px 0; background:var(--white);}
+  .ck .q{font-size:14px; font-weight:700; margin-bottom:3px;}
+  .ck .note{font-size:11.5px; color:var(--gold); margin-bottom:9px;}
+  .yn{display:flex; gap:8px;}
+  .yn button{flex:1; border:1px solid var(--line); background:var(--white); color:var(--ink);
+    border-radius:9px; padding:9px 0; font-size:14px; font-weight:700; cursor:pointer; transition:.12s;}
+  .yn button.yes.on{background:var(--ink); color:#fff; border-color:var(--ink);}
+  .yn button.no.on{background:var(--gold); color:#fff; border-color:var(--gold);}
+  .ck .extra{margin-top:10px; display:none;} .ck .extra.show{display:block;}
+  .notice li{margin:9px 0; font-size:13.5px;}
+  .agree{display:flex; align-items:flex-start; gap:10px; background:var(--soft); border-radius:12px; padding:14px; margin-top:14px; cursor:pointer;}
+  .agree .box{width:24px; height:24px; border:2px solid var(--gold); border-radius:6px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-weight:900; color:#fff; transition:.12s;}
+  .agree.on .box{background:var(--gold);} .agree .t{font-size:13.5px; font-weight:700;}
+  .sigwrap{border:1px dashed var(--gold); border-radius:12px; background:var(--white); position:relative;}
+  canvas#sig{width:100%; height:200px; display:block; border-radius:12px; touch-action:none;}
+  .sigph{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#cfc7bc; font-size:14px; pointer-events:none;}
+  .sigbar{display:flex; justify-content:space-between; align-items:center; margin-top:8px;}
+  .clearbtn{background:none; border:none; color:var(--gold); font-size:13px; font-weight:700; cursor:pointer;}
+  .navbar{position:fixed; left:0; right:0; bottom:0; background:var(--white); border-top:1px solid var(--line); padding:12px 16px; z-index:60;}
+  .navbar .wrap{display:flex; gap:10px;}
+  .btn{flex:1; border:none; border-radius:12px; padding:15px 0; font-size:15.5px; font-weight:900; cursor:pointer; font-family:inherit; transition:.12s;}
+  .btn.primary{background:var(--gold); color:#fff;} .btn.primary:active{background:var(--gold-d);}
+  .btn.ghost{background:var(--soft); color:var(--ink); flex:.5;} .btn:disabled{opacity:.4; cursor:not-allowed;}
+  .done{text-align:center; padding:40px 16px;} .done .ico{font-size:54px;}
+  .done h2{font-size:22px; font-weight:900; margin:10px 0 6px;} .done p{color:var(--muted); font-size:14px;}
+  .toast{position:fixed; bottom:100px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff;
+    padding:12px 20px; border-radius:999px; font-size:13.5px; z-index:100; opacity:0; transition:.3s; pointer-events:none; white-space:nowrap; max-width:90%;}
+  .toast.show{opacity:1;}
+  .small{font-size:11.5px; color:var(--muted); text-align:center; margin-top:14px; line-height:1.5;}
+  .err{color:#c0392b; font-size:12px; margin-top:4px; display:none;} .err.show{display:block;}
+  /* 읽기전용 예약서 표시 */
+  .ro{background:var(--white); border:1px solid var(--line); border-radius:14px; overflow:hidden; margin:16px 0;}
+  .ro .rorow{display:flex; border-bottom:1px solid var(--line); font-size:13.5px;}
+  .ro .rorow:last-child{border-bottom:none;}
+  .ro .rok{background:var(--soft); font-weight:700; padding:11px 13px; width:38%; flex-shrink:0;}
+  .ro .rov{padding:11px 13px; flex:1;}
+  .linkbox{background:var(--soft); border-radius:12px; padding:14px; margin-top:14px; word-break:break-all; font-size:13px;}
+  .copybtn{background:var(--gold); color:#fff; border:none; border-radius:8px; padding:10px 16px; font-weight:700; font-size:13.5px; cursor:pointer; margin-top:10px;}
+  .center{text-align:center;}
+  .loader{text-align:center; padding:60px 0; color:var(--muted);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div>
+      <div class="brand">이지<span>도배</span> 시공예약서</div>
+      <div class="slogan">제대로 받고 제대로 붙여드림</div>
+    </div>
+    <div class="nodot"><span id="serialNo">26년<br>No.</span><span id="modetag"></span></div>
+  </div>
+</header>
+<div class="progress"><i id="bar"></i></div>
+
+<div class="wrap" id="app">
+  <div class="loader" id="loader">불러오는 중...</div>
+</div>
+
+<div class="navbar" id="navbar" style="display:none;">
+  <div class="wrap">
+    <button class="btn ghost" id="prevBtn" style="display:none;">이전</button>
+    <button class="btn primary" id="nextBtn">다음</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ 설정 ============ */
+const SUPABASE_URL="https://tfcsedcfgwpajmpwcvqa.supabase.co";
+const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmY3NlZGNmZ3dwYWptcHdjdnFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0NTQ3MDgsImV4cCI6MjA5NzAzMDcwOH0.IZdBpJHZ-HEQt81IOEkrQW70182I9xpyG4oBUlsfOgc";
+let sb=null;
+function getSB(){ if(sb) return sb; if(window.supabase&&window.supabase.createClient){sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);} return sb; }
+
+/* ============ 체크리스트 정의 ============ */
+const CHECKS=[
+  {q:"몰딩 교체 여부",note:"도배 시 퍼티 요금 추가 발생"},
+  {q:"콘센트 교체 여부",note:"전체 교체 시 개당 1만원 요금 발생"},
+  {q:"화장실·페인트·필름·장판·싱크대·탄성코트 공사 여부",note:"도배 시공일과 공사 일정이 겹치지 않도록 주의"},
+  {q:"등 교체 여부",note:"맡기실 경우 개당 3만원 요금 발생",extra:true},
+  {q:"시스템장 내부 도배 여부",note:"15만원 추가 / 직접 탈거해 비워주시면 추가금 없이 가능"},
+  {q:"붙박이장 내부 도배 여부",note:"서비스 면적 - 추가 금액 없음"},
+  {q:"스피커 구멍 막음 여부",note:""},
+  {q:"에어컨 배관구멍 막음 여부",note:""},
+  {q:"막아야 할 콘센트가 있는지 여부",note:""},
+  {q:"아트월을 도배로 마감할지 여부",note:"하자 발생 가능성 있으며 15만원 추가요금 발생"},
+  {q:"도배일자에 다른 공정이 겹치는지 여부",note:"공정이 겹치면 인건비 추가될 수 있음"},
+  {q:"시스템 에어컨 커버가 천장에 붙어있는지 여부",note:"붙어있으면 1대당 3만원 추가 요금 발생"},
+  {q:"샷시 교체 여부",note:"교체 시 우레탄폼 시공 및 퍼티 추가금 발생"},
+  {q:"문틀 교체 여부",note:"교체 시 우레탄폼 시공 및 퍼티 추가금 발생"},
+];
+const NOTICES=[
+  "도배지가 완전히 마르기까지 보통 1~2주 걸립니다. 벽지가 쭈글거리는 것은 2~3일 안에 팽팽하게 펴지니 걱정하지 않으셔도 됩니다.",
+  "센 바람이나 마파람이 치지 않도록 조심해 주세요. 창문과 문을 모두 열지 마시고, 2~3일은 한쪽만 열어 환기해 주세요. (선풍기 사용 금지 · 에어컨은 벽에 직접 바람이 가지 않으면 괜찮습니다)",
+  "도배 후 난방을 세게 틀면 벽지 이음매가 벌어지거나 터질 수 있으니 주의해 주세요.",
+  "도배 후 몰딩은 바로 닦지 마시고, 2~3일 후 젖은 걸레로 닦아 주세요.",
+  "풀 특성상 젖은 상태에서 닦은 부분은 마르면서 풀이 다시 올라올 수 있습니다. 2~3일 후 마른 걸레나 샤워타올로 털어내고 청소기로 잔여물을 청소해 주세요.",
+  "도배 후 바로 짐을 옮기셔도 되나, 도배지가 찍히면 찢어질 수 있으니 주의하세요. 통풍을 위해 벽에서 5~10cm 띄워 가구를 배치해 주세요.",
+  "궁금한 점이 있으면 언제든 편하게 연락 주세요 :)"
+];
+
+/* ============ 공통 상태 ============ */
+const app=document.getElementById('app');
+const navbar=document.getElementById('navbar');
+const prevBtn=document.getElementById('prevBtn'), nextBtn=document.getElementById('nextBtn');
+let toTimer;
+function toast(m){const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toTimer); toTimer=setTimeout(()=>t.classList.remove('show'),2400);}
+function el(html){const tpl=document.createElement('template'); tpl.innerHTML=html.trim(); return tpl.content.childElementCount===1?tpl.content.firstElementChild:tpl.content;}
+function arr(v){return Array.isArray(v)?(v.join(', ')||'-'):(v||'-');}
+
+/* ============ 모드 분기 ============ */
+const params=new URLSearchParams(location.search);
+const CONTRACT_ID=params.get('id');
+const ADMIN=params.get('admin')==='1';
+
+window.addEventListener('load',()=>{
+  document.getElementById('loader').remove();
+  if(ADMIN){ initAdmin(); }
+  else if(CONTRACT_ID){ initConsumer(CONTRACT_ID); }
+  else { showLanding(); }
+});
+
+/* ============ 랜딩 (id도 admin도 없을 때) ============ */
+function showLanding(){
+  app.appendChild(el(`<div class="card center" style="margin-top:40px;">
+    <div style="font-size:40px;">🔗</div>
+    <h2 style="font-size:18px;margin:12px 0 6px;">잘못된 접근입니다</h2>
+    <p style="color:var(--muted);font-size:13.5px;">
+      시공예약서는 이지도배에서 보내드린 링크로만 열 수 있습니다.<br>
+      링크를 다시 확인해 주세요.</p>
+  </div>`));
+}
+
+/* ============================================================
+   ADMIN 모드 — 지연님이 예약서 작성 → 소비자 링크 생성
+   ============================================================ */
+function initAdmin(){
+  document.getElementById('modetag').textContent=' · 관리자';
+  navbar.style.display='block';
+  const chipState={};
+  app.appendChild(el(`
+  <div class="sec-title">📋 시공예약서 작성</div>
+  <div class="sec-sub">현장답사·통화 내용을 입력하세요. 소비자에게는 읽기전용으로 보입니다.</div>
+
+  <div class="card">
+    <label class="f req">관리자 PIN</label>
+    <input type="text" id="pin" placeholder="이지도배 PIN 입력" autocomplete="off">
+    <div class="hint">소비자에게 절대 공유하지 마세요.</div>
+  </div>
+
+  <div class="card">
+    <label class="f req">고객명</label><input type="text" id="name" placeholder="성함">
+    <label class="f req">연락처</label><input type="tel" id="phone" placeholder="010-0000-0000">
+    <label class="f">시공일</label><input type="text" id="date" placeholder="예: 2026년 7월 15일">
+    <label class="f">주소</label><input type="text" id="addr" placeholder="시공 주소">
+    <label class="f">출입 비밀번호 (소비자에게 안 보임)</label>
+    <div class="row2"><input type="text" id="pw_pub" placeholder="공용현관"><input type="text" id="pw_home" placeholder="현관"></div>
+  </div>
+
+  <div class="card">
+    <label class="f">주거형태</label>
+    <div class="chips" data-single="housing">
+      <div class="chip">아파트</div><div class="chip">빌라</div><div class="chip">원투룸</div>
+      <div class="chip">단독</div><div class="chip">오피스텔</div><div class="chip">상가</div><div class="chip">그외</div></div>
+    <label class="f">가견적 금액</label><input type="text" id="quote" placeholder="예: 1,200,000원">
+    <label class="f">시공 벽지 종류</label>
+    <div class="chips" data-single="paper"><div class="chip">개나리</div><div class="chip">LX</div><div class="chip">그외</div></div>
+    <div class="row2" style="margin-top:10px;">
+      <div><label class="f" style="margin-top:0;">천장지 NO.</label><input type="text" id="ceil_no"></div>
+      <div><label class="f" style="margin-top:0;">벽지 NO.</label><input type="text" id="wall_no"></div></div>
+    <label class="f">포인트 벽지</label><input type="text" id="point_no" placeholder="번호 / 위치">
+    <label class="f">시공 장판 종류</label>
+    <div class="chips" data-single="floor"><div class="chip">LX</div><div class="chip">KCC</div><div class="chip">그외</div></div>
+    <div class="row2" style="margin-top:10px;">
+      <div><label class="f" style="margin-top:0;">바닥 평수</label><input type="number" id="floor_area" placeholder="평"></div>
+      <div><label class="f" style="margin-top:0;">베란다 시공</label><select id="veranda"><option value="">선택</option><option>예</option><option>아니오</option></select></div></div>
+  </div>
+
+  <div class="card">
+    <label class="f">기존 벽지 철거</label>
+    <div class="chips" data-single="demo"><div class="chip">모두철거</div><div class="chip">부분철거</div><div class="chip">덧방</div></div>
+    <label class="f">발코니 확장</label>
+    <div class="chips" data-multi="balcony"><div class="chip">확장무</div><div class="chip">거실</div><div class="chip">안방</div><div class="chip">방1</div><div class="chip">방2</div></div>
+    <label class="f">시스템장</label>
+    <div class="chips" data-multi="system"><div class="chip">없음</div><div class="chip">시공안함</div><div class="chip">드레스</div><div class="chip">펜트리</div><div class="chip">파우더</div></div>
+    <label class="f">붙박이장</label>
+    <div class="chips" data-multi="builtin"><div class="chip">없음</div><div class="chip">안방</div><div class="chip">작은방1</div><div class="chip">작은방2</div><div class="chip">작은방3</div></div>
+    <label class="f">우물천장</label>
+    <div class="chips" data-multi="well"><div class="chip">없음</div><div class="chip">거실</div><div class="chip">방</div></div>
+    <label class="f">짐</label>
+    <div class="chips" data-single="luggage"><div class="chip">없음</div><div class="chip">있음</div></div>
+    <label class="f">곰팡이·결로·누수</label><input type="text" id="mold" placeholder="이상 없으면 비워두세요">
+    <label class="f">최종 시공비</label><input type="text" id="final" placeholder="예: 1,150,000원">
+  </div>
+  <div id="result"></div>
+  `));
+  initChips(chipState);
+  nextBtn.textContent='소비자 링크 생성';
+  nextBtn.onclick=async ()=>{
+    const pin=v('pin'); if(!pin){toast('PIN을 입력하세요.'); return;}
+    if(!v('name')||!v('phone')){toast('고객명·연락처는 필수입니다.'); return;}
+    nextBtn.disabled=true; nextBtn.textContent='생성 중...';
+    const reservation={
+      addr:v('addr'), housing:chipState.housing||'', quote:v('quote'), paper:chipState.paper||'',
+      ceil_no:v('ceil_no'), wall_no:v('wall_no'), point_no:v('point_no'),
+      floor:chipState.floor||'', floor_area:v('floor_area'), veranda:v('veranda'),
+      demo:chipState.demo||'', balcony:chipState.balcony||[], system:chipState.system||[],
+      builtin:chipState.builtin||[], well:chipState.well||[], luggage:chipState.luggage||'',
+      mold:v('mold'), final:v('final')
+    };
+    const priv={pw_pub:v('pw_pub'), pw_home:v('pw_home')};
+    try{
+      const client=getSB(); if(!client) throw new Error('네트워크 오류');
+      const {data,error}=await client.rpc('create_contract',{
+        p_pin:pin, p_reservation:reservation, p_private:priv,
+        p_name:v('name'), p_phone:v('phone'), p_date:v('date')
+      });
+      if(error) throw error;
+      const row=Array.isArray(data)?data[0]:data;
+      const newId=row.id, serialNo=row.serial_no||'';
+      const link=location.origin+location.pathname+'?id='+newId;
+      document.getElementById('result').appendChild(el(`
+        <div class="card" style="border-color:var(--gold);">
+          <div style="font-weight:900;color:var(--gold);">✅ 예약서 ${serialNo} 생성 완료</div>
+          <p style="font-size:13px;color:var(--muted);margin:8px 0;">아래 링크를 소비자에게 카톡/문자로 보내세요.</p>
+          <div class="linkbox" id="lk">${link}</div>
+          <button class="copybtn" id="cp">링크 복사하기</button>
+        </div>`));
+      document.getElementById('cp').onclick=()=>{
+        navigator.clipboard.writeText(link).then(()=>toast('복사되었습니다!')).catch(()=>toast('길게 눌러 복사하세요.'));
+      };
+      navbar.style.display='none';
+      document.getElementById('result').scrollIntoView({behavior:'smooth'});
+    }catch(e){
+      toast('생성 실패: '+(e.message||'PIN 확인'));
+      nextBtn.disabled=false; nextBtn.textContent='소비자 링크 생성';
+    }
+  };
+}
+
+/* ============================================================
+   CONSUMER 모드 — 예약서 읽기 + 체크리스트·서명 작성
+   ============================================================ */
+let CK={}, CHIP={}, agreed=false, hasSig=false, canvas, ctx, savedAll=null;
+async function initConsumer(id){
+  app.appendChild(el(`<div class="loader">시공예약서를 불러오는 중...</div>`));
+  let data;
+  try{
+    const client=getSB(); if(!client) throw new Error('네트워크 오류');
+    const r=await client.rpc('get_contract',{p_id:id});
+    if(r.error) throw r.error;
+    if(!r.data||!r.data.length) throw new Error('존재하지 않는 예약서입니다.');
+    data=r.data[0];
+  }catch(e){
+    app.innerHTML='';
+    app.appendChild(el(`<div class="card center" style="margin-top:40px;">
+      <div style="font-size:40px;">⚠️</div>
+      <h2 style="font-size:17px;margin:12px 0 6px;">예약서를 찾을 수 없습니다</h2>
+      <p style="color:var(--muted);font-size:13.5px;">${e.message||'링크를 확인해 주세요.'}</p></div>`));
+    return;
+  }
+  if(data.status==='completed'){
+    app.innerHTML='';
+    app.appendChild(el(`<div class="card center" style="margin-top:40px;">
+      <div style="font-size:40px;">✅</div>
+      <h2 style="font-size:18px;margin:12px 0 6px;">이미 작성 완료된 예약서입니다</h2>
+      <p style="color:var(--muted);font-size:13.5px;">서명까지 완료되었습니다. 감사합니다!</p></div>`));
+    return;
+  }
+  app.innerHTML='';
+  savedAll={serial_no:data.serial_no, reservation:data.reservation||{}, customer_name:data.customer_name, customer_phone:data.customer_phone, construction_date:data.construction_date};
+  if(data.serial_no){ document.getElementById('serialNo').innerHTML='No.<br>'+data.serial_no; }
+  buildConsumer(data);
+  navbar.style.display='block';
+  nextBtn.onclick=consumerNext;
+  showStep(1);
+}
+
+let cstep=1; const CTOTAL=3;
+function buildConsumer(data){
+  const r=data.reservation||{};
+  // STEP 1: 읽기전용 예약서
+  const ro=el(`<section class="step" data-cstep="1">
+    <div class="sec-title">📋 시공예약 내용 확인</div>
+    <div class="sec-sub">이지도배에서 작성한 내용입니다. 확인 후 다음으로 넘어가세요.</div>
+    <div class="ro" id="roTable"></div>
+  </section>`);
+  app.appendChild(ro);
+  const t=ro.querySelector('#roTable');
+  function row(k,vv){ if(vv&&String(vv).trim()&&arr(vv)!=='-') t.appendChild(el(`<div class="rorow"><div class="rok">${k}</div><div class="rov">${arr(vv)}</div></div>`)); }
+  row('고객명',data.customer_name); row('연락처',data.customer_phone); row('시공일',data.construction_date);
+  row('주소',r.addr); row('주거형태',r.housing); row('가견적',r.quote);
+  row('시공벽지',r.paper); row('천장지NO.',r.ceil_no); row('벽지NO.',r.wall_no); row('포인트벽지',r.point_no);
+  row('시공장판',r.floor); row('바닥평수',r.floor_area?r.floor_area+'평':''); row('베란다시공',r.veranda);
+  row('기존벽지철거',r.demo); row('발코니확장',r.balcony); row('시스템장',r.system);
+  row('붙박이장',r.builtin); row('우물천장',r.well); row('짐',r.luggage); row('곰팡이/결로/누수',r.mold);
+  row('최종시공비',r.final);
+  t.appendChild(el(`<div class="rorow"><div class="rok">하자처리</div><div class="rov">시공일 이후 14일 이내 무상(소비자 과실 제외)</div></div>`));
+
+  // STEP 2: 체크리스트
+  const s2=el(`<section class="step" data-cstep="2">
+    <div class="sec-title">✅ 시공 전 체크리스트</div>
+    <div class="sec-sub">해당 여부를 선택해 주세요. 추가요금이 발생할 수 있는 항목입니다.</div>
+    <div id="checklist"></div></section>`);
+  app.appendChild(s2);
+  const box=s2.querySelector('#checklist');
+  CHECKS.forEach((c,i)=>{
+    const extra=c.extra?`<div class="extra" id="ex${i}">
+        <div class="chips" data-single="ex${i}" style="margin-bottom:8px;"><div class="chip">일부</div><div class="chip">전체</div></div>
+        <input type="text" id="expos${i}" placeholder="일부일 경우 위치"></div>`:'';
+    const cel=el(`<div class="ck"><div class="q">${i+1}. ${c.q}</div>
+      ${c.note?`<div class="note">${c.note}</div>`:''}
+      <div class="yn"><button class="yes" data-i="${i}" data-v="예">예</button><button class="no" data-i="${i}" data-v="아니오">아니오</button></div>${extra}</div>`);
+    box.appendChild(cel);
+  });
+  box.querySelectorAll('.yn button').forEach(b=>{
+    b.onclick=()=>{const i=b.dataset.i,vv=b.dataset.v; CK[i]=vv;
+      b.closest('.yn').querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+      const ex=document.getElementById('ex'+i); if(ex) ex.classList.toggle('show',vv==='예');};
+  });
+
+  // STEP 3: 유의사항 + 서명
+  const s3=el(`<section class="step" data-cstep="3">
+    <div class="sec-title">📌 도배 후 유의사항</div>
+    <div class="sec-sub">아래 내용을 확인하신 후 동의해 주세요.</div>
+    <div class="card"><ol class="notice">${NOTICES.map(n=>`<li>${n}</li>`).join('')}</ol>
+      <div class="agree" id="agree"><div class="box">✓</div>
+        <div class="t">위 유의사항을 모두 확인하였으며, 시공예약 내용에 동의합니다.</div></div></div>
+    <div class="sec-title">✍️ 전자서명</div>
+    <div class="sec-sub">아래 칸에 손가락으로 서명해 주세요.</div>
+    <div class="card">
+      <label class="f req">서명자 성함</label><input type="text" id="signed_name" placeholder="서명하시는 분 성함">
+      <label class="f">서명</label>
+      <div class="sigwrap"><canvas id="sig"></canvas><div class="sigph" id="sigph">여기에 서명해 주세요</div></div>
+      <div class="sigbar"><span class="hint">서명 시각·기기정보가 함께 기록됩니다.</span>
+        <button class="clearbtn" id="sigclear">다시 쓰기</button></div></div>
+    <div class="small">본 전자서명은 전자문서 및 전자거래 기본법에 따른 전자적 의사표시로 처리되며,<br>서명 시각·접속 기기 정보가 증빙으로 함께 저장됩니다.</div>
+  </section>`);
+  app.appendChild(s3);
+  document.getElementById('agree').onclick=function(){agreed=!agreed; this.classList.toggle('on',agreed);};
+
+  // DONE
+  app.appendChild(el(`<section class="step" data-cstep="4"><div class="done">
+    <div class="ico">🎉</div><h2>제출이 완료되었습니다</h2>
+    <p>이지도배에 안전하게 전송되었습니다.<br>아래 버튼으로 작성 내용을 PDF로 저장하실 수 있어요.</p>
+    <div style="margin-top:24px;"><button class="btn primary" id="pdfbtn" style="max-width:280px;margin:0 auto;">📄 작성 내용 PDF로 저장</button></div>
+    <p style="margin-top:24px;font-size:12.5px;">제대로 받고 제대로 붙여드림 · 이지도배</p></div></section>`));
+
+  initChips(CHIP);
+  canvas=document.getElementById('sig'); ctx=canvas.getContext('2d'); fitCanvas();
+  setupSig();
+  document.getElementById('pdfbtn').onclick=savePDF;
+}
+
+function showStep(n){
+  document.querySelectorAll('[data-cstep]').forEach(s=>s.classList.toggle('active',+s.dataset.cstep===n));
+  document.getElementById('bar').style.width=(Math.min(n,CTOTAL)/CTOTAL*100)+'%';
+  prevBtn.style.display=(n>1&&n<=CTOTAL)?'block':'none';
+  if(n>CTOTAL){ navbar.style.display='none'; }
+  else nextBtn.textContent=(n===CTOTAL)?'제출하기':'다음';
+  window.scrollTo({top:0,behavior:'smooth'}); cstep=n;
+}
+prevBtn.onclick=()=>{ if(cstep>1) showStep(cstep-1); };
+
+/* consumer 전용 next 핸들러는 showStep 후 nextBtn.onclick으로 동적 처리 */
+function consumerNext(){
+  if(cstep===1){ showStep(2); return; }
+  if(cstep===2){ showStep(3); return; }
+  if(cstep===3){ submitConsumer(); }
+}
+
+async function submitConsumer(){
+  if(!agreed){toast('유의사항 동의가 필요합니다.'); return;}
+  if(!v('signed_name')){toast('서명자 성함을 입력해 주세요.'); return;}
+  if(!hasSig){toast('서명을 해주세요.'); return;}
+  nextBtn.disabled=true; nextBtn.textContent='전송 중...';
+  const checklist={};
+  CHECKS.forEach((c,i)=>{ checklist[i+1]={q:c.q,answer:CK[i]||'미선택'};
+    if(c.extra) checklist[i+1].detail=((CHIP['ex'+i]||'')+' '+(v('expos'+i)||'')).trim(); });
+  try{
+    const client=getSB(); if(!client) throw new Error('네트워크 오류');
+    const {data,error}=await client.rpc('submit_contract',{
+      p_id:CONTRACT_ID, p_checklist:checklist, p_notice_agreed:agreed,
+      p_signature:canvas.toDataURL('image/png'), p_signed_name:v('signed_name'),
+      p_user_agent:navigator.userAgent
+    });
+    if(error) throw error;
+    if(data==='already_completed'){toast('이미 작성 완료된 예약서입니다.'); return;}
+    if(data==='not_found'){toast('예약서를 찾을 수 없습니다.'); return;}
+    savedAll.checklist=checklist; savedAll.signed_name=v('signed_name');
+    savedAll.signature_data=canvas.toDataURL('image/png'); savedAll.signed_at=new Date().toISOString();
+    showStep(4);
+  }catch(e){ toast('전송 실패: '+(e.message||'네트워크')); nextBtn.disabled=false; nextBtn.textContent='제출하기'; }
+}
+
+/* ============ 공통: chip / canvas / pdf ============ */
+function initChips(state){
+  document.querySelectorAll('[data-single]').forEach(g=>{
+    const key=g.dataset.single;
+    g.querySelectorAll('.chip').forEach(c=>{c.onclick=()=>{
+      g.querySelectorAll('.chip').forEach(x=>x.classList.remove('on')); c.classList.add('on'); state[key]=c.textContent;};});
+  });
+  document.querySelectorAll('[data-multi]').forEach(g=>{
+    const key=g.dataset.multi; state[key]=[];
+    g.querySelectorAll('.chip').forEach(c=>{c.onclick=()=>{c.classList.toggle('on');
+      state[key]=[...g.querySelectorAll('.chip.on')].map(x=>x.textContent);};});
+  });
+}
+function fitCanvas(){
+  if(!canvas) return;
+  const r=canvas.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  canvas.width=r.width*dpr; canvas.height=r.height*dpr;
+  ctx.scale(dpr,dpr); ctx.lineWidth=2.4; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#1A1613';
+}
+function setupSig(){
+  let drawing=false;
+  function pos(e){const r=canvas.getBoundingClientRect(); const t=e.touches?e.touches[0]:e; return {x:t.clientX-r.left,y:t.clientY-r.top};}
+  function st(e){drawing=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault();}
+  function mv(e){if(!drawing)return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke();
+    if(!hasSig){hasSig=true; document.getElementById('sigph').style.display='none';} e.preventDefault();}
+  function en(){drawing=false;}
+  canvas.addEventListener('mousedown',st); canvas.addEventListener('mousemove',mv);
+  canvas.addEventListener('mouseup',en); canvas.addEventListener('mouseleave',en);
+  canvas.addEventListener('touchstart',st,{passive:false}); canvas.addEventListener('touchmove',mv,{passive:false}); canvas.addEventListener('touchend',en);
+  document.getElementById('sigclear').onclick=()=>{ctx.clearRect(0,0,canvas.width,canvas.height); hasSig=false; document.getElementById('sigph').style.display='flex';};
+}
+async function savePDF(){
+  if(!savedAll){toast('데이터가 없습니다.'); return;}
+  const btn=document.getElementById('pdfbtn'); btn.disabled=true; btn.textContent='PDF 생성 중...';
+  try{
+    const node=buildPrintable(savedAll); document.body.appendChild(node);
+    const cv=await html2canvas(node,{scale:2,backgroundColor:'#ffffff'});
+    document.body.removeChild(node);
+    const {jsPDF}=window.jspdf; const pdf=new jsPDF({unit:'mm',format:'a4'});
+    const pw=210, ph=297, iw=pw, ih=cv.height*pw/cv.width;
+    const img=cv.toDataURL('image/jpeg',0.92);
+    let left=ih, pos=0; pdf.addImage(img,'JPEG',0,0,iw,ih); left-=ph;
+    while(left>0){ pos=left-ih; pdf.addPage(); pdf.addImage(img,'JPEG',0,pos,iw,ih); left-=ph; }
+    pdf.save(`이지도배_시공예약서_${savedAll.customer_name||'고객'}.pdf`);
+    btn.disabled=false; btn.textContent='📄 작성 내용 PDF로 저장';
+  }catch(e){ toast('PDF 생성 실패'); btn.disabled=false; btn.textContent='📄 작성 내용 PDF로 저장'; }
+}
+function buildPrintable(d){
+  const r=d.reservation||{}, c=d.checklist||{};
+  const wrap=document.createElement('div');
+  wrap.style.cssText='position:fixed;left:-9999px;top:0;width:760px;background:#fff;color:#1A1613;font-family:"Noto Sans KR",sans-serif;padding:40px;';
+  const rowT=(k,vv)=>`<tr><td style="padding:6px 8px;border:1px solid #eee;background:#FAF9F7;font-weight:700;width:130px;font-size:12px;">${k}</td><td style="padding:6px 8px;border:1px solid #eee;font-size:12px;">${(vv&&String(vv).trim())?arr(vv):'-'}</td></tr>`;
+  let cks=''; Object.keys(c).forEach(k=>{const it=c[k];
+    cks+=`<tr><td style="padding:6px 8px;border:1px solid #eee;font-size:12px;">${k}. ${it.q}</td><td style="padding:6px 8px;border:1px solid #eee;font-weight:700;font-size:12px;text-align:center;width:70px;">${it.answer}</td></tr>`;
+    if(it.detail&&it.detail.trim()) cks+=`<tr><td colspan="2" style="padding:4px 8px;border:1px solid #eee;font-size:11px;color:#888;">↳ ${it.detail}</td></tr>`;});
+  wrap.innerHTML=`
+    <div style="text-align:center;border-bottom:3px solid #C4703F;padding-bottom:14px;margin-bottom:20px;">
+      <div style="font-size:24px;font-weight:900;">이지<span style="color:#C4703F;">도배</span> 시공예약서</div>
+      <div style="font-size:12px;color:#C4703F;margin-top:4px;font-weight:700;">제대로 받고 제대로 붙여드림</div>
+      ${d.serial_no?`<div style="font-size:12px;color:#8A8178;margin-top:6px;">No. ${d.serial_no}</div>`:''}</div>
+    <h3 style="color:#C4703F;font-size:15px;margin:18px 0 8px;">📋 시공예약서</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      ${rowT('고객명',d.customer_name)}${rowT('연락처',d.customer_phone)}${rowT('시공일',d.construction_date)}
+      ${rowT('주소',r.addr)}${rowT('주거형태',r.housing)}${rowT('가견적',r.quote)}${rowT('시공벽지',r.paper)}
+      ${rowT('천장지/벽지 NO.',(r.ceil_no||'-')+' / '+(r.wall_no||'-'))}${rowT('포인트벽지',r.point_no)}
+      ${rowT('시공장판',r.floor)}${rowT('바닥평수',r.floor_area?r.floor_area+'평':'-')}${rowT('베란다시공',r.veranda)}
+      ${rowT('기존벽지철거',r.demo)}${rowT('발코니확장',r.balcony)}${rowT('시스템장',r.system)}
+      ${rowT('붙박이장',r.builtin)}${rowT('우물천장',r.well)}${rowT('짐',r.luggage)}${rowT('곰팡이/결로/누수',r.mold)}${rowT('최종시공비',r.final)}
+    </table>
+    <h3 style="color:#C4703F;font-size:15px;margin:22px 0 8px;">✅ 시공 전 체크리스트</h3>
+    <table style="width:100%;border-collapse:collapse;">${cks}</table>
+    <h3 style="color:#C4703F;font-size:15px;margin:22px 0 8px;">📌 유의사항 동의</h3>
+    <div style="font-size:13px;padding:10px 12px;background:#F2EEE8;border-radius:8px;">✓ 도배 후 유의사항을 모두 확인하였으며, 시공예약 내용에 동의합니다.</div>
+    <h3 style="color:#C4703F;font-size:15px;margin:22px 0 8px;">✍️ 전자서명</h3>
+    <div style="border:1px solid #E5E0D8;border-radius:8px;padding:14px;">
+      <div style="font-size:13px;margin-bottom:8px;">서명자: <b>${d.signed_name||'-'}</b></div>
+      <img src="${d.signature_data}" style="max-width:300px;height:auto;border-bottom:1px solid #ccc;">
+      <div style="font-size:11px;color:#8A8178;margin-top:10px;">서명 시각: ${d.signed_at?new Date(d.signed_at).toLocaleString('ko-KR'):'-'}<br>본 전자서명은 전자문서 및 전자거래 기본법에 따른 전자적 의사표시입니다.</div></div>
+    <div style="margin-top:20px;font-size:11px;color:#8A8178;border-top:1px solid #eee;padding-top:10px;">
+      입금계좌 · 카카오뱅크 3333-27-2648513 (이지도배) | 하자 처리: 시공일 이후 14일 이내 무상(소비자 과실 제외)</div>`;
+  return wrap;
+}
+
+function v(id){const e=document.getElementById(id); return e?e.value.trim():'';}
+window.addEventListener('resize',()=>{ if(canvas){const d=hasSig?canvas.toDataURL():null; fitCanvas();} });
+</script>
+</body>
+</html>
