@@ -124,18 +124,18 @@ function getSB(){ if(sb) return sb; if(window.supabase&&window.supabase.createCl
 
 /* ============ 체크리스트 정의 ============ */
 const CHECKS=[
-  {q:"몰딩 교체 여부",note:"도배 시 퍼티 요금 추가 발생"},
-  {q:"콘센트 교체 여부",note:"전체 교체 시 개당 1만원 요금 발생"},
-  {q:"화장실·페인트·필름·장판·싱크대·탄성코트 공사 여부",note:"도배 시공일과 공사 일정이 겹치지 않도록 주의"},
+  {q:"몰딩 교체 여부",note:"도배 시 퍼티 요금 추가 발생",memo:"교체할 몰딩 위치를 적어주세요 (예: 거실, 안방)"},
+  {q:"콘센트 교체 여부",note:"전체 교체 시 개당 1만원 요금 발생",memo:"교체할 콘센트 위치·개수를 적어주세요"},
+  {q:"화장실·페인트·필름·장판·싱크대·탄성코트 공사 여부",note:"도배 시공일과 공사 일정이 겹치지 않도록 주의",memo:"어떤 공사인지, 일정을 적어주세요"},
   {q:"등 교체 여부",note:"맡기실 경우 개당 3만원 요금 발생",extra:true},
-  {q:"시스템장 내부 도배 여부",note:"15만원 추가 / 직접 탈거해 비워주시면 추가금 없이 가능"},
-  {q:"붙박이장 내부 도배 여부",note:"서비스 면적 - 추가 금액 없음"},
+  {q:"시스템장 내부 도배 여부",note:"15만원 추가 / 직접 탈거해 비워주시면 추가금 없이 가능",memo:"직접 탈거 여부 등 메모"},
+  {q:"붙박이장 내부 도배 여부",note:"서비스 면적 - 추가 금액 없음",memo:"위치를 적어주세요"},
   {q:"스피커 구멍 막음 여부",note:""},
   {q:"에어컨 배관구멍 막음 여부",note:""},
-  {q:"막아야 할 콘센트가 있는지 여부",note:""},
+  {q:"막아야 할 콘센트가 있는지 여부",note:"",memo:"막을 콘센트 위치를 적어주세요"},
   {q:"아트월을 도배로 마감할지 여부",note:"하자 발생 가능성 있으며 15만원 추가요금 발생"},
-  {q:"도배일자에 다른 공정이 겹치는지 여부",note:"공정이 겹치면 인건비 추가될 수 있음"},
-  {q:"시스템 에어컨 커버가 천장에 붙어있는지 여부",note:"붙어있으면 1대당 3만원 추가 요금 발생"},
+  {q:"도배일자에 다른 공정이 겹치는지 여부",note:"공정이 겹치면 인건비 추가될 수 있음",memo:"겹치는 공정과 날짜를 적어주세요"},
+  {q:"시스템 에어컨 커버가 천장에 붙어있는지 여부",note:"붙어있으면 1대당 3만원 추가 요금 발생",memo:"에어컨 대수·위치를 적어주세요"},
   {q:"샷시 교체 여부",note:"교체 시 우레탄폼 시공 및 퍼티 추가금 발생"},
   {q:"문틀 교체 여부",note:"교체 시 우레탄폼 시공 및 퍼티 추가금 발생"},
 ];
@@ -160,13 +160,15 @@ function arr(v){return Array.isArray(v)?(v.join(', ')||'-'):(v||'-');}
 
 /* ============ 모드 분기 ============ */
 const params=new URLSearchParams(location.search);
+const SHORT_CODE=params.get('c');
 const CONTRACT_ID=params.get('id');
 const ADMIN=params.get('admin')==='1';
 
 window.addEventListener('load',()=>{
   document.getElementById('loader').remove();
   if(ADMIN){ initAdmin(); }
-  else if(CONTRACT_ID){ initConsumer(CONTRACT_ID); }
+  else if(SHORT_CODE){ initConsumer({code:SHORT_CODE}); }
+  else if(CONTRACT_ID){ initConsumer({id:CONTRACT_ID}); }
   else { showLanding(); }
 });
 
@@ -267,17 +269,29 @@ function initAdmin(){
       });
       if(error) throw error;
       const row=Array.isArray(data)?data[0]:data;
-      const newId=row.id, serialNo=row.serial_no||'';
-      const link=location.origin+location.pathname+'?id='+newId;
+      const newId=row.id, serialNo=row.serial_no||'', code=row.short_code||'';
+      const cName=v('name'), cPhone=v('phone');
+      const link=location.origin+location.pathname+'?c='+code;
+      // 소비자 안심용 문자 메시지 (업체명·본인이름·목적 명시)
+      const msg=`[이지도배] ${cName}님, 안녕하세요. 시공 예약 내용 확인과 서명을 위한 안전한 링크입니다.\n아래 주소에서 내용을 확인하시고 서명해 주세요 :)\n${link}\n\n※ 이지도배에서 직접 보낸 링크이니 안심하고 확인하셔도 됩니다.`;
+      const smsHref2='sms:'+(cPhone.replace(/[^0-9]/g,''))+'?body='+encodeURIComponent(msg);
       document.getElementById('result').appendChild(el(`
         <div class="card" style="border-color:var(--gold);">
-          <div style="font-weight:900;color:var(--gold);">✅ 예약서 ${serialNo} 생성 완료</div>
-          <p style="font-size:13px;color:var(--muted);margin:8px 0;">아래 링크를 소비자에게 카톡/문자로 보내세요.</p>
-          <div class="linkbox" id="lk">${link}</div>
-          <button class="copybtn" id="cp">링크 복사하기</button>
+          <div style="font-weight:900;color:var(--gold);font-size:16px;">✅ 예약서 ${serialNo} 생성 완료</div>
+          <p style="font-size:13px;color:var(--muted);margin:10px 0 6px;">아래 <b>문자 보내기</b> 버튼을 누르면 안심 문구와 링크가 자동으로 채워집니다.</p>
+          <a href="${smsHref2}" id="smsbtn" style="display:block;text-align:center;background:var(--gold);color:#fff;border-radius:10px;padding:14px;font-weight:900;text-decoration:none;margin:10px 0;">📩 ${cName}님께 문자 보내기</a>
+          <div style="font-size:11.5px;color:var(--muted);margin:12px 0 4px;font-weight:700;">소비자에게 보낼 메시지 미리보기</div>
+          <div class="linkbox" style="white-space:pre-line;font-size:12.5px;" id="msgbox">${msg}</div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="copybtn" id="cpmsg" style="flex:1;">메시지 복사</button>
+            <button class="copybtn" id="cp" style="flex:1;background:var(--ink);">링크만 복사</button>
+          </div>
         </div>`));
       document.getElementById('cp').onclick=()=>{
-        navigator.clipboard.writeText(link).then(()=>toast('복사되었습니다!')).catch(()=>toast('길게 눌러 복사하세요.'));
+        navigator.clipboard.writeText(link).then(()=>toast('링크가 복사되었습니다!')).catch(()=>toast('길게 눌러 복사하세요.'));
+      };
+      document.getElementById('cpmsg').onclick=()=>{
+        navigator.clipboard.writeText(msg).then(()=>toast('메시지가 복사되었습니다!')).catch(()=>toast('길게 눌러 복사하세요.'));
       };
       navbar.style.display='none';
       document.getElementById('result').scrollIntoView({behavior:'smooth'});
@@ -292,12 +306,16 @@ function initAdmin(){
    CONSUMER 모드 — 예약서 읽기 + 체크리스트·서명 작성
    ============================================================ */
 let CK={}, CHIP={}, agreed=false, hasSig=false, canvas, ctx, savedAll=null;
-async function initConsumer(id){
+let REF={code:null,id:null};  // 제출 시 사용할 식별자
+async function initConsumer(ref){
+  REF=ref;
   app.appendChild(el(`<div class="loader">시공예약서를 불러오는 중...</div>`));
   let data;
   try{
     const client=getSB(); if(!client) throw new Error('네트워크 오류');
-    const r=await client.rpc('get_contract',{p_id:id});
+    const r = ref.code
+      ? await client.rpc('get_by_code',{p_code:ref.code})
+      : await client.rpc('get_contract',{p_id:ref.id});
     if(r.error) throw r.error;
     if(!r.data||!r.data.length) throw new Error('존재하지 않는 예약서입니다.');
     data=r.data[0];
@@ -355,9 +373,15 @@ function buildConsumer(data){
   app.appendChild(s2);
   const box=s2.querySelector('#checklist');
   CHECKS.forEach((c,i)=>{
-    const extra=c.extra?`<div class="extra" id="ex${i}">
+    let extra='';
+    if(c.extra){
+      extra=`<div class="extra" id="ex${i}">
         <div class="chips" data-single="ex${i}" style="margin-bottom:8px;"><div class="chip">일부</div><div class="chip">전체</div></div>
-        <input type="text" id="expos${i}" placeholder="일부일 경우 위치"></div>`:'';
+        <input type="text" id="expos${i}" placeholder="일부일 경우 위치"></div>`;
+    } else if(c.memo){
+      extra=`<div class="extra" id="ex${i}">
+        <textarea id="memo${i}" placeholder="${c.memo}" style="min-height:48px;"></textarea></div>`;
+    }
     const cel=el(`<div class="ck"><div class="q">${i+1}. ${c.q}</div>
       ${c.note?`<div class="note">${c.note}</div>`:''}
       <div class="yn"><button class="yes" data-i="${i}" data-v="예">예</button><button class="no" data-i="${i}" data-v="아니오">아니오</button></div>${extra}</div>`);
@@ -426,19 +450,23 @@ async function submitConsumer(){
   nextBtn.disabled=true; nextBtn.textContent='전송 중...';
   const checklist={};
   CHECKS.forEach((c,i)=>{ checklist[i+1]={q:c.q,answer:CK[i]||'미선택'};
-    if(c.extra) checklist[i+1].detail=((CHIP['ex'+i]||'')+' '+(v('expos'+i)||'')).trim(); });
+    if(c.extra) checklist[i+1].detail=((CHIP['ex'+i]||'')+' '+(v('expos'+i)||'')).trim();
+    else if(c.memo && CK[i]==='예') checklist[i+1].detail=v('memo'+i); });
   try{
     const client=getSB(); if(!client) throw new Error('네트워크 오류');
-    const {data,error}=await client.rpc('submit_contract',{
-      p_id:CONTRACT_ID, p_checklist:checklist, p_notice_agreed:agreed,
-      p_signature:canvas.toDataURL('image/png'), p_signed_name:v('signed_name'),
-      p_user_agent:navigator.userAgent
-    });
+    const sig=canvas.toDataURL('image/png');
+    const {data,error} = REF.code
+      ? await client.rpc('submit_by_code',{
+          p_code:REF.code, p_checklist:checklist, p_notice_agreed:agreed,
+          p_signature:sig, p_signed_name:v('signed_name'), p_user_agent:navigator.userAgent})
+      : await client.rpc('submit_contract',{
+          p_id:REF.id, p_checklist:checklist, p_notice_agreed:agreed,
+          p_signature:sig, p_signed_name:v('signed_name'), p_user_agent:navigator.userAgent});
     if(error) throw error;
     if(data==='already_completed'){toast('이미 작성 완료된 예약서입니다.'); return;}
     if(data==='not_found'){toast('예약서를 찾을 수 없습니다.'); return;}
     savedAll.checklist=checklist; savedAll.signed_name=v('signed_name');
-    savedAll.signature_data=canvas.toDataURL('image/png'); savedAll.signed_at=new Date().toISOString();
+    savedAll.signature_data=sig; savedAll.signed_at=new Date().toISOString();
     showStep(4);
   }catch(e){ toast('전송 실패: '+(e.message||'네트워크')); nextBtn.disabled=false; nextBtn.textContent='제출하기'; }
 }
@@ -481,12 +509,13 @@ async function savePDF(){
     const node=buildPrintable(savedAll); document.body.appendChild(node);
     const cv=await html2canvas(node,{scale:2,backgroundColor:'#ffffff'});
     document.body.removeChild(node);
-    const {jsPDF}=window.jspdf; const pdf=new jsPDF({unit:'mm',format:'a4'});
-    const pw=210, ph=297, iw=pw, ih=cv.height*pw/cv.width;
-    const img=cv.toDataURL('image/jpeg',0.92);
-    let left=ih, pos=0; pdf.addImage(img,'JPEG',0,0,iw,ih); left-=ph;
-    while(left>0){ pos=left-ih; pdf.addPage(); pdf.addImage(img,'JPEG',0,pos,iw,ih); left-=ph; }
-    pdf.save(`이지도배_시공예약서_${savedAll.customer_name||'고객'}.pdf`);
+    const {jsPDF}=window.jspdf;
+    const pw=210;                          // A4 폭(mm)
+    const ih=cv.height*pw/cv.width;        // 내용 전체 높이(mm)
+    // 내용 높이에 딱 맞는 단일 페이지 → 페이지 경계 잘림 없음
+    const pdf=new jsPDF({unit:'mm',format:[pw,ih],orientation:'portrait'});
+    pdf.addImage(cv.toDataURL('image/jpeg',0.92),'JPEG',0,0,pw,ih);
+    pdf.save(`이지도배_시공예약서_${savedAll.serial_no||savedAll.customer_name||'고객'}.pdf`);
     btn.disabled=false; btn.textContent='📄 작성 내용 PDF로 저장';
   }catch(e){ toast('PDF 생성 실패'); btn.disabled=false; btn.textContent='📄 작성 내용 PDF로 저장'; }
 }
