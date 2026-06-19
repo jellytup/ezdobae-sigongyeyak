@@ -605,53 +605,76 @@ async function savePDF(){
   if(!savedAll){toast('데이터가 없습니다.'); return;}
   const btn=document.getElementById('pdfbtn'); btn.disabled=true; btn.textContent='PDF 생성 중...';
   try{
-    const node=buildPrintable(savedAll); document.body.appendChild(node);
-    const cv=await html2canvas(node,{scale:2,backgroundColor:'#ffffff'});
-    document.body.removeChild(node);
+    const pages=buildPrintable(savedAll);
     const {jsPDF}=window.jspdf;
-    const pw=210;                          // A4 폭(mm)
-    const ih=cv.height*pw/cv.width;        // 내용 전체 높이(mm)
-    // 내용 높이에 딱 맞는 단일 페이지 → 페이지 경계 잘림 없음
-    const pdf=new jsPDF({unit:'mm',format:[pw,ih],orientation:'portrait'});
-    pdf.addImage(cv.toDataURL('image/jpeg',0.92),'JPEG',0,0,pw,ih);
+    const pw=210, ph=297;                  // A4 (mm)
+    const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    for(let i=0;i<pages.length;i++){
+      const node=pages[i]; document.body.appendChild(node);
+      const cv=await html2canvas(node,{scale:2,backgroundColor:'#ffffff'});
+      document.body.removeChild(node);
+      // 내용을 A4 폭에 맞추고, 높이가 넘으면 A4 높이에 맞춰 축소
+      let w=pw, h=cv.height*pw/cv.width;
+      if(h>ph){ h=ph; w=cv.width*ph/cv.height; }
+      const x=(pw-w)/2, y=0;
+      if(i>0) pdf.addPage();
+      pdf.addImage(cv.toDataURL('image/jpeg',0.92),'JPEG',x,y,w,h);
+    }
     pdf.save(`이지도배_시공예약서_${savedAll.serial_no||savedAll.customer_name||'고객'}.pdf`);
     btn.disabled=false; btn.textContent='📄 작성 내용 PDF로 저장';
-  }catch(e){ toast('PDF 생성 실패'); btn.disabled=false; btn.textContent='📄 작성 내용 PDF로 저장'; }
+  }catch(e){ console.error(e); toast('PDF 생성 실패'); btn.disabled=false; btn.textContent='📄 작성 내용 PDF로 저장'; }
 }
 function buildPrintable(d){
   const r=d.reservation||{}, c=d.checklist||{};
-  const wrap=document.createElement('div');
-  wrap.style.cssText='position:fixed;left:-9999px;top:0;width:760px;background:#fff;color:#1A1613;font-family:"Noto Sans KR",sans-serif;padding:40px;';
-  const rowT=(k,vv)=>`<tr><td style="padding:6px 8px;border:1px solid #eee;background:#FAF9F7;font-weight:700;width:130px;font-size:12px;">${k}</td><td style="padding:6px 8px;border:1px solid #eee;font-size:12px;">${(vv&&String(vv).trim())?arr(vv):'-'}</td></tr>`;
+  const rowT=(k,vv)=>`<tr><td style="padding:7px 9px;border:1px solid #ddd;background:#FAF9F7;font-weight:700;width:130px;font-size:12.5px;">${k}</td><td style="padding:7px 9px;border:1px solid #ddd;font-size:12.5px;">${(vv&&String(vv).trim())?arr(vv):'-'}</td></tr>`;
   let cks=''; Object.keys(c).forEach(k=>{const it=c[k];
-    cks+=`<tr><td style="padding:6px 8px;border:1px solid #eee;font-size:12px;">${k}. ${it.q}</td><td style="padding:6px 8px;border:1px solid #eee;font-weight:700;font-size:12px;text-align:center;width:70px;">${it.answer}</td></tr>`;
-    if(it.detail&&it.detail.trim()) cks+=`<tr><td colspan="2" style="padding:4px 8px;border:1px solid #eee;font-size:11px;color:#888;">↳ ${it.detail}</td></tr>`;});
-  wrap.innerHTML=`
-    <div style="text-align:center;border-bottom:3px solid #C4703F;padding-bottom:14px;margin-bottom:20px;">
+    cks+=`<tr><td style="padding:7px 9px;border:1px solid #ddd;font-size:12.5px;">${k}. ${it.q}</td><td style="padding:7px 9px;border:1px solid #ddd;font-weight:700;font-size:12.5px;text-align:center;width:80px;">${it.answer}</td></tr>`;
+    if(it.detail&&it.detail.trim()) cks+=`<tr><td colspan="2" style="padding:5px 9px;border:1px solid #ddd;font-size:11.5px;color:#C4703F;">↳ ${it.detail}</td></tr>`;});
+
+  // 각 페이지 공통 헤더
+  const header=`<div style="text-align:center;border-bottom:3px solid #C4703F;padding-bottom:14px;margin-bottom:22px;">
       <div style="font-size:24px;font-weight:900;">이지<span style="color:#C4703F;">도배</span> 시공예약서</div>
       <div style="font-size:12px;color:#C4703F;margin-top:4px;font-weight:700;">제대로 받고 제대로 붙여드림</div>
-      ${d.serial_no?`<div style="font-size:12px;color:#8A8178;margin-top:6px;">No. ${d.serial_no}</div>`:''}</div>
-    <h3 style="color:#C4703F;font-size:15px;margin:18px 0 8px;">📋 시공예약서</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      ${d.serial_no?`<div style="font-size:12px;color:#8A8178;margin-top:6px;">No. ${d.serial_no}</div>`:''}</div>`;
+  const footer=`<div style="margin-top:auto;padding-top:16px;font-size:11px;color:#8A8178;border-top:1px solid #eee;">
+      입금계좌 · 카카오뱅크 3333-27-2648513 (이지도배) | 하자 처리: 시공일 이후 14일 이내 무상(소비자 과실 제외)</div>`;
+
+  function pageDiv(inner){
+    const el=document.createElement('div');
+    // A4 비율(210:297)에 맞춘 페이지. 760px 폭 → 약 1075px 높이
+    el.style.cssText='position:fixed;left:-9999px;top:0;width:760px;min-height:1075px;background:#fff;color:#1A1613;font-family:"Noto Sans KR",sans-serif;padding:46px 44px;display:flex;flex-direction:column;box-sizing:border-box;';
+    el.innerHTML=header+inner+footer;
+    return el;
+  }
+
+  // 페이지 1: 시공예약서
+  const p1=pageDiv(`
+    <h3 style="color:#C4703F;font-size:16px;margin:0 0 12px;">📋 시공예약서</h3>
+    <table style="width:100%;border-collapse:collapse;">
       ${rowT('고객명',d.customer_name)}${rowT('연락처',d.customer_phone)}${rowT('시공일',d.construction_date)}
       ${rowT('주소',r.addr)}${rowT('주거형태',r.housing)}${rowT('가견적',r.quote)}${rowT('시공벽지',r.paper)}
       ${rowT('천장지/벽지 NO.',(r.ceil_no||'-')+' / '+(r.wall_no||'-'))}${rowT('포인트벽지',r.point_no)}
       ${rowT('시공장판',r.floor)}${rowT('바닥평수',r.floor_area?r.floor_area+'평':'-')}${rowT('베란다시공',r.veranda)}
       ${rowT('기존벽지철거',r.demo)}${rowT('발코니확장',r.balcony)}${rowT('시스템장',r.system)}
       ${rowT('붙박이장',r.builtin)}${rowT('우물천장',r.well)}${rowT('짐',r.luggage)}${rowT('곰팡이/결로/누수',r.mold)}${rowT('최종시공비',r.final)}
-    </table>
-    <h3 style="color:#C4703F;font-size:15px;margin:22px 0 8px;">✅ 시공 전 체크리스트</h3>
-    <table style="width:100%;border-collapse:collapse;">${cks}</table>
-    <h3 style="color:#C4703F;font-size:15px;margin:22px 0 8px;">📌 유의사항 동의</h3>
-    <div style="font-size:13px;padding:10px 12px;background:#F2EEE8;border-radius:8px;">✓ 도배 후 유의사항을 모두 확인하였으며, 시공예약 내용에 동의합니다.</div>
-    <h3 style="color:#C4703F;font-size:15px;margin:22px 0 8px;">✍️ 전자서명</h3>
-    <div style="border:1px solid #E5E0D8;border-radius:8px;padding:14px;">
-      <div style="font-size:13px;margin-bottom:8px;">서명자: <b>${d.signed_name||'-'}</b></div>
-      <img src="${d.signature_data}" style="max-width:300px;height:auto;border-bottom:1px solid #ccc;">
-      <div style="font-size:11px;color:#8A8178;margin-top:10px;">서명 시각: ${d.signed_at?new Date(d.signed_at).toLocaleString('ko-KR'):'-'}<br>본 전자서명은 전자문서 및 전자거래 기본법에 따른 전자적 의사표시입니다.</div></div>
-    <div style="margin-top:20px;font-size:11px;color:#8A8178;border-top:1px solid #eee;padding-top:10px;">
-      입금계좌 · 카카오뱅크 3333-27-2648513 (이지도배) | 하자 처리: 시공일 이후 14일 이내 무상(소비자 과실 제외)</div>`;
-  return wrap;
+    </table>`);
+
+  // 페이지 2: 시공 전 체크리스트
+  const p2=pageDiv(`
+    <h3 style="color:#C4703F;font-size:16px;margin:0 0 12px;">✅ 시공 전 체크리스트</h3>
+    <table style="width:100%;border-collapse:collapse;">${cks||'<tr><td style="padding:8px;border:1px solid #ddd;font-size:12px;color:#888;">작성된 항목이 없습니다.</td></tr>'}</table>`);
+
+  // 페이지 3: 유의사항 동의 + 전자서명
+  const p3=pageDiv(`
+    <h3 style="color:#C4703F;font-size:16px;margin:0 0 12px;">📌 유의사항 동의</h3>
+    <div style="font-size:13px;padding:12px 14px;background:#F2EEE8;border-radius:8px;">✓ 도배 후 유의사항을 모두 확인하였으며, 시공예약 내용에 동의합니다.</div>
+    <h3 style="color:#C4703F;font-size:16px;margin:24px 0 12px;">✍️ 전자서명</h3>
+    <div style="border:1px solid #E5E0D8;border-radius:8px;padding:16px;">
+      <div style="font-size:13px;margin-bottom:10px;">서명자: <b>${d.signed_name||'-'}</b></div>
+      ${d.signature_data?`<img src="${d.signature_data}" style="max-width:320px;height:auto;border-bottom:1px solid #ccc;">`:'<div style="color:#999;font-size:12px;">(서명 없음)</div>'}
+      <div style="font-size:11.5px;color:#8A8178;margin-top:12px;">서명 시각: ${d.signed_at?new Date(d.signed_at).toLocaleString('ko-KR'):'-'}<br>본 전자서명은 전자문서 및 전자거래 기본법에 따른 전자적 의사표시입니다.</div></div>`);
+
+  return [p1,p2,p3];
 }
 
 function v(id){const e=document.getElementById(id); return e?e.value.trim():'';}
